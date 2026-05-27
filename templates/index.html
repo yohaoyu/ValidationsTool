@@ -47,6 +47,12 @@
     <section class="card">
       <h2>B · Project Investment Check</h2>
       <p class="muted">Checks <code>project_total ≈ previous_appropriations + sum(year_*)</code>. Rows with |residual| &gt; 2 ($K) are flagged.</p>
+      <div class="extra-cols-row">
+        <label>+ extra right-side columns:
+          <input id="p1-extra-cols" type="text" placeholder="comma-separated column names">
+        </label>
+        <button id="p1-extra-apply">Apply</button>
+      </div>
       <div class="stat-row">
         <div class="stat"><span id="p1-rows-with-total">—</span><label>Rows with total</label></div>
         <div class="stat"><span id="p1-rows-missing-total">—</span><label>Rows missing total</label></div>
@@ -68,7 +74,7 @@
         <table class="data-table" id="p1-offenders-table">
           <thead>
             <tr>
-              <th>CIP Year</th><th>Page</th><th>Project ID</th><th>Project Name</th>
+              <th>CIP Year</th><th>Page</th><th>Project ID</th><th>Project Name</th><th>Label</th>
               <th>Prev. Approp.</th><th>Project Total</th><th>Year Sum</th><th>Residual</th>
             </tr>
           </thead>
@@ -126,7 +132,7 @@
       <h3>Duplicate projects <small>(by ID, same CIP year)</small></h3>
       <div class="table-scroll">
         <table class="data-table" id="p1-dup-id-table">
-          <thead><tr><th>CIP Year</th><th>Project ID</th><th>Project Name</th><th>Count</th><th>Source Pages</th></tr></thead>
+          <thead><tr><th>CIP Year</th><th>Project ID</th><th>Project Name</th><th>Label</th><th>Count</th><th>Source Pages</th></tr></thead>
           <tbody></tbody>
         </table>
       </div>
@@ -194,7 +200,10 @@
         <div id="p2-row-detail" class="row-detail hidden">
           <div class="detail-toolbar">
             <span class="left-section-header" style="padding:0">Project Information</span>
-            <button id="p2-save-edits-btn" disabled>Save Edits</button>
+            <span class="detail-toolbar-actions">
+              <button id="p2-open-csv-btn" class="secondary-btn" title="Open this file's CSV in your default app">Open Current CSV</button>
+              <button id="p2-save-edits-btn" disabled>Save Edits</button>
+            </span>
           </div>
           <div class="table-scroll">
             <table class="data-table detail-table" id="p2-detail-table">
@@ -217,9 +226,11 @@
               <option value="delete">Delete project</option>
             </select>
           </div>
+          <select id="p2-notes-common" class="common-note-select"><option value="">+ Common note…</option></select>
           <textarea id="p2-notes" placeholder="Notes (optional, saved on blur)…" rows="1"></textarea>
           <div id="p2-delete-confirm" class="delete-confirm hidden">
             <div class="delete-warn">Mark this project as deleted? A note is required.</div>
+            <select id="p2-delete-common" class="common-note-select"><option value="">+ Common note…</option></select>
             <textarea id="p2-delete-note" placeholder="Reason for deletion (required)…" rows="2"></textarea>
             <div class="delete-actions">
               <button id="p2-delete-cancel">Cancel</button>
@@ -241,6 +252,10 @@
         <span>/ <span id="pdf-total-pages">—</span></span>
         <button id="pdf-next" disabled>Next ▶</button>
         <button id="pdf-rotate" disabled title="Rotate page 90° clockwise">↻ Rotate</button>
+        <label class="pdf-adjust" title="Offset applied to source_page when opening a row (e.g. +2)">
+          Adjust <input id="pdf-adjust" type="number" value="0" step="1">
+        </label>
+        <button id="pdf-open-btn" disabled title="Open this PDF in your default app">Open Current PDF</button>
       </div>
       <div class="pdf-container">
         <canvas id="pdf-canvas"></canvas>

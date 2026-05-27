@@ -161,7 +161,8 @@ def get_files(city):
     return pairs
 
 
-def run_validation(city):
+def run_validation(city, extra_cols=None):
+    extra_cols = extra_cols or []
     csv_dir = BASE_DIR / city / 'CSV'
     city_slug = city.lower().replace(' ', '_')
     exclude = {f'{city_slug}_cip_quality_issues.csv', f'{city_slug}_cip_long.csv'}
@@ -177,7 +178,7 @@ def run_validation(city):
         dfs.append(df)
 
     combined = pd.concat(dfs, ignore_index=True, sort=False).fillna('')
-    for c in ID_COLS:
+    for c in ID_COLS + [LABEL_COL, NOTES_COL]:
         if c not in combined.columns:
             combined[c] = ''
 
@@ -193,12 +194,21 @@ def run_validation(city):
 
     combined['year_sum'] = year_numeric.fillna(0).sum(axis=1)
 
+    # Optional extra columns added to the right side of the equation
+    valid_extra = [c for c in extra_cols if c and c in combined.columns]
+    if valid_extra:
+        extra_numeric = combined[valid_extra].apply(lambda s: s.map(parse_money))
+        combined['_extra_sum'] = extra_numeric.fillna(0).sum(axis=1)
+    else:
+        combined['_extra_sum'] = 0.0
+
     valid_total = (
         combined['_total_n'].notna()
         & (combined['project_total'].astype(str).str.strip() != '')
     )
     combined['residual'] = (
-        combined['_total_n'] - combined['_prev_n'].fillna(0) - combined['year_sum']
+        combined['_total_n'] - combined['_prev_n'].fillna(0)
+        - combined['year_sum'] - combined['_extra_sum']
     )
     combined.loc[~valid_total, 'residual'] = float('nan')
 
@@ -213,7 +223,7 @@ def run_validation(city):
     null_markers = {'', 'nan', 'na', 'n/a', 'tbd'}
     year_col_pattern = re.compile(r'^year_\d{4}$')
     skip_cols = {'source_file', LABEL_COL, NOTES_COL,
-                 '_total_n', '_prev_n', 'year_sum', 'residual'}  # internal / computed columns
+                 '_total_n', '_prev_n', 'year_sum', '_extra_sum', 'residual'}  # internal / computed columns
 
     def _missing_for(df):
         rows = []
@@ -296,6 +306,8 @@ def run_validation(city):
             count=('project_id', 'size'),
             project_name=('project_name', 'first'),
             source_pages=('source_page', lambda x: ', '.join(sorted({str(p) for p in x if str(p).strip()}))),
+            labels=(LABEL_COL, lambda x: ', '.join(sorted({str(v) for v in x if str(v).strip()}))),
+            notes=(NOTES_COL, lambda x: ' | '.join([str(v) for v in x if str(v).strip()])),
         )
         .reset_index()
     )
@@ -309,12 +321,15 @@ def run_validation(city):
             'project_name': str(r['project_name']),
             'count': int(r['count']),
             'source_pages': r['source_pages'],
+            'labels': r['labels'],
+            'notes': r['notes'],
         }
         for _, r in dup_id_grouped.iterrows()
     ]
 
     show_cols = ['cip_year', 'source_page', 'project_id', 'project_name',
-                 'previous_appropriations', 'project_total', 'year_sum', 'residual']
+                 'previous_appropriations', 'project_total', 'year_sum', 'residual',
+                 LABEL_COL, NOTES_COL]
     all_flagged = flagged.reindex(
         flagged['residual'].abs().sort_values(ascending=False).index
     )[show_cols]
@@ -855,17 +870,10 @@ def api_combine(city):
     })
 
 
-@app.route('/api/open', methods=['POST'])
-def api_open_file():
-    """Open a file (under CIPBD/) in the OS default application."""
-    data = request.get_json() or {}
-    raw = data.get('path')
-    if not raw:
-        return jsonify({'error': 'No path provided'}), 400
-    p = Path(raw).resolve()
-    base = BASE_DIR.resolve()
-    # Security: only allow files inside the CIPBD data directory
-    if base not in p.parents:
+def _os_open(p):
+    """Open a resolved path in the OS default app, guarded to the data directory."""
+    p = Path(p).resolve()
+    if BASE_DIR.resolve() not in p.parents:
         return jsonify({'error': 'Path is outside the data directory'}), 403
     if not p.exists():
         return jsonify({'error': 'File not found'}), 404
@@ -879,6 +887,32 @@ def api_open_file():
     except Exception as e:  # noqa: BLE001
         return jsonify({'error': str(e)}), 500
     return jsonify({'ok': True})
+
+
+@app.route('/api/open', methods=['POST'])
+def api_open_file():
+    """Open a file (under CIPBD/) in the OS default application."""
+    data = request.get_json() or {}
+    raw = data.get('path')
+    if not raw:
+        return jsonify({'error': 'No path provided'}), 400
+    return _os_open(raw)
+
+
+@app.route('/api/cities/<city>/open_source', methods=['POST'])
+def api_open_source(city):
+    """Open the current file's CSV or PDF for a given stem in the OS default app."""
+    data = request.get_json() or {}
+    stem = data.get('stem')
+    kind = data.get('kind')
+    match = next((f for f in get_files(city) if f['stem'] == stem), None)
+    if not match:
+        return jsonify({'error': 'File not found'}), 404
+    if kind == 'csv':
+        return _os_open(BASE_DIR / city / 'CSV' / match['csv'])
+    if kind == 'pdf':
+        return _os_open(BASE_DIR / city / 'PDF' / match['pdf'])
+    return jsonify({'error': 'kind must be csv or pdf'}), 400
 
 
 @app.route('/api/validations/<city>/<stem>')
@@ -984,7 +1018,9 @@ def api_delete_row(city, stem, idx):
 
 @app.route('/api/cities/<city>/validate')
 def api_validate(city):
-    return jsonify(run_validation(city))
+    extra = request.args.get('extra', '')
+    extra_cols = [c.strip() for c in extra.split(',') if c.strip()]
+    return jsonify(run_validation(city, extra_cols=extra_cols))
 
 
 @app.route('/api/instructions')
@@ -995,6 +1031,19 @@ def api_instructions():
                 404, {'Content-Type': 'text/plain; charset=utf-8'})
     return (md_path.read_text(encoding='utf-8'),
             200, {'Content-Type': 'text/markdown; charset=utf-8'})
+
+
+@app.route('/api/common_notes')
+def api_common_notes():
+    """Quick-pick notes parsed from ValidationsTool/common_notes.md (bullet items only)."""
+    p = TOOL_DIR / 'common_notes.md'
+    notes = []
+    if p.exists():
+        for line in p.read_text(encoding='utf-8').splitlines():
+            m = re.match(r'^\s*[-*]\s+(.+)', line)
+            if m:
+                notes.append(m.group(1).strip())
+    return jsonify({'notes': notes})
 
 
 def _generate_sample(city, percent=3.0, seed=None):

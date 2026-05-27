@@ -124,6 +124,9 @@ header {
   gap: 12px;
   flex-shrink: 0;
   font-size: 12px;
+  position: sticky;   /* stay visible while the page scrolls */
+  top: 0;
+  z-index: 5;
 }
 
 .toolbar label {
@@ -686,6 +689,14 @@ table { font-size: 90%; }
   color: var(--ink-muted);
   cursor: default;
 }
+.detail-toolbar-actions { display: flex; gap: 8px; align-items: center; }
+/* Secondary (outline) button — used for "Open Current CSV" */
+.detail-toolbar .secondary-btn {
+  background: var(--surface);
+  color: var(--primary);
+  border: 1px solid var(--primary);
+}
+.detail-toolbar .secondary-btn:hover { background: var(--primary-tint); }
 
 .detail-table { width: 100%; }
 .detail-table td { vertical-align: top; }
@@ -886,6 +897,27 @@ table { font-size: 90%; }
   font-weight: 600;
 }
 
+/* Page-adjust control in the PDF toolbar */
+.pdf-adjust {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: #fff;
+  font-size: 11.5px;
+}
+#pdf-adjust {
+  width: 46px;
+  text-align: center;
+  background: rgba(255,255,255,0.92);
+  color: var(--primary);
+  border: none;
+  border-radius: 3px;
+  padding: 3px 4px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+}
+
 .pdf-container {
   flex: 1;
   overflow: auto;
@@ -993,6 +1025,65 @@ table { font-size: 90%; }
   font-size: 11.5px;
   color: var(--ink);
   white-space: pre-wrap;
+}
+
+/* Subtle "extra right-side columns" control in Section B */
+.extra-cols-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 10px;
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+.extra-cols-row label { display: flex; align-items: center; gap: 6px; }
+.extra-cols-row input {
+  font-family: inherit;
+  font-size: 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  padding: 3px 7px;
+  width: 240px;
+}
+.extra-cols-row input:focus { outline: none; border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-soft-hover); }
+.extra-cols-row button {
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border: 1px solid var(--primary);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--primary);
+  cursor: pointer;
+}
+.extra-cols-row button:hover { background: var(--primary-tint); }
+
+/* Common-note quick-pick dropdowns (verdict notes + delete note) */
+.common-note-select {
+  width: 100%;
+  margin-bottom: 6px;
+  padding: 4px 8px;
+  font-family: inherit;
+  font-size: 11.5px;
+  color: var(--ink-soft);
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--surface);
+  cursor: pointer;
+}
+.common-note-select:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-soft-hover);
+}
+
+/* Label cell with a hover note (Offenders / Duplicate tables) */
+.data-table .has-note {
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+  cursor: help;
+  font-weight: 600;
 }
 
 /* Combine success banner + actions */

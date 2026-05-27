@@ -34,6 +34,9 @@ const state = {
     currentPage: 1,
     totalPages: 0,
     rendering: false,
+    rotation: 0,
+    adjust: 0,          // offset added to source_page when opening a row
+    sourcePage: null,   // source_page of the currently selected row
   },
 };
 
@@ -72,6 +75,7 @@ document.querySelectorAll('.tab-btn').forEach((btn) => {
       p.classList.toggle('hidden', p.id !== target);
     });
     if (target === 'page4') loadInstructions();
+    if (target === 'page2') loadCommonNotes();
   });
 });
 
@@ -120,7 +124,7 @@ const p1Empty = document.getElementById('p1-empty');
 
 p1City.addEventListener('change', () => { p1RunBtn.disabled = !p1City.value; });
 
-p1RunBtn.addEventListener('click', async () => {
+async function runP1Validation() {
   const city = p1City.value;
   if (!city) return;
   p1RunBtn.disabled = true;
@@ -128,7 +132,10 @@ p1RunBtn.addEventListener('click', async () => {
   p1Content.classList.add('hidden');
   p1Empty.classList.add('hidden');
   try {
-    const data = await api.get(`/api/cities/${encodeURIComponent(city)}/validate`);
+    const extra = (document.getElementById('p1-extra-cols').value || '').trim();
+    const url = `/api/cities/${encodeURIComponent(city)}/validate`
+      + (extra ? `?extra=${encodeURIComponent(extra)}` : '');
+    const data = await api.get(url);
     renderPage1(data, city);
     p1Content.classList.remove('hidden');
     // Now that the section is visible, check if file list overflows
@@ -146,6 +153,11 @@ p1RunBtn.addEventListener('click', async () => {
     p1Spinner.classList.add('hidden');
     p1RunBtn.disabled = false;
   }
+}
+
+p1RunBtn.addEventListener('click', runP1Validation);
+document.getElementById('p1-extra-apply').addEventListener('click', () => {
+  if (p1City.value) runP1Validation();
 });
 
 function renderPage1(data, city) {
@@ -233,6 +245,16 @@ function renderPage1(data, city) {
   renderPaginatedTable('dupId');
 }
 
+// Render a validation_label cell; hovering shows the note (if any) via title.
+function labelCell(label, note) {
+  const lbl = (label || '').trim();
+  const n = (note || '').trim();
+  if (!lbl && !n) return '<td>—</td>';
+  const title = n ? ` title="${escHtml(n)}"` : '';
+  const cls = n ? ' class="has-note"' : '';
+  return `<td><span${cls}${title}>${escHtml(lbl) || '—'}</span></td>`;
+}
+
 function renderPaginatedTable(which) {
   const cfg = {
     offenders: {
@@ -248,6 +270,7 @@ function renderPaginatedTable(which) {
           <td>${escHtml(r.project_id) || '—'}</td>
           <td><span class="top10-link" data-city="${state.p1.city}" data-year="${r.cip_year}"
                     data-proj="${encodeURIComponent(r.project_id ?? '')}">${escHtml(r.project_name) || '—'}</span></td>
+          ${labelCell(r.validation_label, r.notes)}
           <td>${escHtml(r.previous_appropriations) || '—'}</td>
           <td>${escHtml(r.project_total) || '—'}</td>
           <td>${r.year_sum != null ? r.year_sum.toFixed(1) : '—'}</td>
@@ -271,6 +294,7 @@ function renderPaginatedTable(which) {
         <td><span class="top10-link" data-city="${state.p1.city}" data-year="${r.cip_year}"
                   data-proj="${encodeURIComponent(r.project_id)}">${escHtml(r.project_id)}</span></td>
         <td>${escHtml(r.project_name)}</td>
+        ${labelCell(r.labels, r.notes)}
         <td>${r.count}</td>
         <td>${escHtml(r.source_pages)}</td>
       </tr>`,
@@ -829,16 +853,24 @@ async function selectRow(idx) {
     else incorrectBtn.classList.add('active');
   }
 
-  // PDF: jump to source_page
+  // PDF: jump to source_page (+ page-adjust offset)
   const sourcePage = parseInt(data.source_page, 10);
+  state.pdf.sourcePage = isNaN(sourcePage) ? null : sourcePage;
   if (state.p2.pdfFilename) {
     const pdfUrl = `/api/cities/${encodeURIComponent(city)}/pdf/${encodeURIComponent(state.p2.pdfFilename)}`;
     if (!state.pdf.doc || state.pdf.url !== pdfUrl) await loadPdf(pdfUrl);
-    if (!isNaN(sourcePage)) gotoPage(sourcePage);
+    if (state.pdf.sourcePage != null) gotoPage(state.pdf.sourcePage + (state.pdf.adjust || 0));
   }
 }
 
 // Save edited row values back to CSV
+document.getElementById('p2-open-csv-btn').addEventListener('click', async () => {
+  const { city, stem } = state.p2;
+  if (!city || !stem) { showToast('Select a project first'); return; }
+  const res = await api.post(`/api/cities/${encodeURIComponent(city)}/open_source`, { stem, kind: 'csv' });
+  if (!res.ok) showToast(res.error || 'Could not open CSV');
+});
+
 document.getElementById('p2-save-edits-btn').addEventListener('click', async () => {
   const { city, stem, selectedRow, detailEdited } = state.p2;
   if (selectedRow == null || Object.keys(detailEdited).length === 0) return;
@@ -916,6 +948,39 @@ document.getElementById('p2-notes').addEventListener('blur', () => {
   if (current !== prev) saveValidation();
 });
 
+// ── Common notes (quick-pick from common_notes.md) ─────────────────────────
+async function loadCommonNotes() {
+  let notes = [];
+  try {
+    const data = await fetch('/api/common_notes', { cache: 'no-store' }).then((r) => r.json());
+    notes = data.notes || [];
+  } catch (e) { /* leave empty */ }
+  ['p2-notes-common', 'p2-delete-common'].forEach((id) => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    sel.innerHTML = '<option value="">+ Common note…</option>'
+      + notes.map((n) => `<option value="${escHtml(n)}">${escHtml(n)}</option>`).join('');
+  });
+}
+
+function insertCommonNote(textarea, note) {
+  const cur = textarea.value.trim();
+  textarea.value = cur ? `${cur}; ${note}` : note;
+  textarea.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+document.getElementById('p2-notes-common').addEventListener('change', (e) => {
+  if (!e.target.value) return;
+  insertCommonNote(document.getElementById('p2-notes'), e.target.value);
+  e.target.value = '';  // reset to placeholder
+  if (state.p2.verdict) saveValidation();  // persist if a verdict already exists
+});
+document.getElementById('p2-delete-common').addEventListener('change', (e) => {
+  if (!e.target.value) return;
+  insertCommonNote(document.getElementById('p2-delete-note'), e.target.value);
+  e.target.value = '';
+});
+
 function clearRowDetail() {
   document.getElementById('p2-row-detail').classList.add('hidden');
   document.getElementById('p2-row-detail-empty').classList.remove('hidden');
@@ -978,6 +1043,8 @@ const pdfTotalPages = document.getElementById('pdf-total-pages');
 const pdfPrev = document.getElementById('pdf-prev');
 const pdfNext = document.getElementById('pdf-next');
 const pdfRotate = document.getElementById('pdf-rotate');
+const pdfAdjust = document.getElementById('pdf-adjust');
+const pdfOpenBtn = document.getElementById('pdf-open-btn');
 
 async function loadPdf(url) {
   state.pdf.url = url;
@@ -1032,6 +1099,7 @@ function setPdfNavEnabled(enabled) {
   pdfPrev.disabled = !enabled || state.pdf.currentPage <= 1;
   pdfNext.disabled = !enabled || state.pdf.currentPage >= state.pdf.totalPages;
   pdfRotate.disabled = !enabled;
+  pdfOpenBtn.disabled = !enabled;
 }
 
 function resetPdf() {
@@ -1054,6 +1122,22 @@ pdfRotate.addEventListener('click', () => {
   if (!state.pdf.doc) return;
   state.pdf.rotation = ((state.pdf.rotation || 0) + 90) % 360;
   renderPage(state.pdf.currentPage);
+});
+// Page adjust: offset applied to a row's source_page when opening it
+pdfAdjust.addEventListener('change', () => {
+  const v = parseInt(pdfAdjust.value, 10);
+  state.pdf.adjust = isNaN(v) ? 0 : v;
+  pdfAdjust.value = state.pdf.adjust;
+  if (state.pdf.doc && state.pdf.sourcePage != null) {
+    renderPage(state.pdf.sourcePage + state.pdf.adjust);
+  }
+});
+// Open the current PDF in the OS default app
+pdfOpenBtn.addEventListener('click', async () => {
+  const { city, stem } = state.p2;
+  if (!city || !stem) { showToast('Select a project first'); return; }
+  const res = await api.post(`/api/cities/${encodeURIComponent(city)}/open_source`, { stem, kind: 'pdf' });
+  if (!res.ok) showToast(res.error || 'Could not open PDF');
 });
 pdfPageInput.addEventListener('change', () => {
   const n = parseInt(pdfPageInput.value, 10);
@@ -1184,3 +1268,4 @@ document.getElementById('p3-open-md').addEventListener('click', () => openFile(p
 // ── Boot ──────────────────────────────────────────────────────────────────
 loadCities();
 setupResizers();
+loadCommonNotes();

@@ -41,6 +41,7 @@ CIPBD/
   ValidationsTool/                     ← this tool
     app.py
     README.md                          ← what you're reading now
+    common_notes.md                    ← editable quick-pick notes (see Manual Check)
     requirements.txt
     run.sh
     static/ · templates/
@@ -52,12 +53,12 @@ Cities are discovered automatically — any folder under `CIPBD/` that contains 
 
 ## Page 1 · Quality Report
 
-Pick a city and click **Run Validation**.
+Pick a city and click **Run Validation**. (The City / Run bar stays pinned to the top as you scroll.)
 
 - **A · Load Summary** — file count, total rows, unique project IDs, plan-year span. **Show more / Show less** expands the file list when it overflows.
-- **B · Project Investment Check** — checks `project_total ≈ previous_appropriations + sum(year_*)`; rows where `|residual| > 2` ($K) are flagged. *Flagged rows by CIP year* shows a **Time Period** column (the investment year-range); the *Offenders* table is paginated 10 per page — click a project name to open it in **Manual Check**.
+- **B · Project Investment Check** — checks `project_total ≈ previous_appropriations + sum(year_*)`; rows where `|residual| > 2` ($K) are flagged. A small **+ extra right-side columns** field lets you add more columns to the right of the equation (comma-separated, then **Apply** to re-run). *Flagged rows by CIP year* shows a **Time Period** column (the investment year-range); the *Offenders* table is paginated 10 per page, includes a **Label** column (hover the label to see its note), and clicking a project name opens it in **Manual Check**.
 - **C · Column Completeness Check** — % of rows where each column is blank / NA / TBD, sorted high to low. `year_XXXX` and internal/computed columns are excluded. Use the **Scope** dropdown or **Prev / Next file** buttons to switch between city-wide and a single file.
-- **D · Duplicate Projects Check** — rows sharing the same `project_id` within the same CIP year. Click a project ID to open all matching rows in **Manual Check**.
+- **D · Duplicate Projects Check** — rows sharing the same `project_id` within the same CIP year, with a **Label** column (hover for notes). Click a project ID to open all matching rows in **Manual Check**.
 
 ---
 
@@ -66,11 +67,13 @@ Pick a city and click **Run Validation**.
 Side-by-side verification — CSV row on the left, source PDF page on the right.
 
 1. **Pick a city.** The **File** dropdown defaults to **All files**, so every project across all files shows immediately (each row carries a file tag). Choose a specific file to narrow to it, or use **Sample**.
-2. **Click a row** → the PDF jumps to that row's `source_page`. PDF controls: **◀ Prev / Next ▶**, a page-number box, and **↻ Rotate** (90° clockwise).
-3. **Edit a cell** → type into any value in *Project Information*, then **Save Edits**. The CSV is rewritten in place; the change is appended to `Validation/edit_log.md` and the row's `Validation/<stem>.json` record (with timestamps).
+2. **Click a row** → the PDF jumps to that row's `source_page`. PDF controls: **◀ Prev / Next ▶**, a page-number box, **↻ Rotate** (90° clockwise), **Adjust** (a page offset added to `source_page` when opening a row — default `0`, use e.g. `+2` when the PDF's physical pages are shifted), and **Open Current PDF** (opens the file in your OS default app).
+3. **Edit a cell** → type into any value in *Project Information*, then **Save Edits** (next to **Open Current CSV**, which opens the file in your OS default app). The CSV is rewritten in place; the change is appended to `Validation/edit_log.md` and the row's `Validation/<stem>.json` record (with timestamps).
 4. **Record a verdict** → **✓ Correct** or **✗ Incorrect** (saved immediately). Add an optional **note** (saved on blur).
 5. **Delete a project** → the **More** dropdown → *Delete project* → type a **required note** → **Confirm delete**. This is a soft delete (the row stays in the CSV but is labeled `deleted` and excluded from Combine).
 6. **Filters**: **Project Name**, **Project ID**, and **Validation Label** (multi-select: validated / edited / incorrect / deleted) narrow the list in real time.
+
+Both note fields (verdict and delete) have a **+ Common note…** dropdown for quick-picking frequent notes; selecting one inserts (or appends) its text, and you can still type freely. Manage these in `ValidationsTool/common_notes.md` — each `- bullet` line becomes an option (headers and paragraphs are ignored).
 
 ### Validation label & notes (written into the CSV)
 
@@ -98,12 +101,15 @@ Drag the **vertical** purple bar between the left panel and the PDF to change PD
 2. Reads every CSV in `<City>/CSV/`, concatenates them, drops rows labeled `deleted`, then pivots `year_*` columns into long-format `(plan_year, invest)` rows (blank / zero allocations dropped).
 3. Writes two timestamped files into `<City>/` (never overwriting — adds `_HHMM` / `_HHMMSS` if needed):
    - **`<City>_cip_long_MMDD.csv`** — long-format data.
-   - **`<City>_cip_long_MMDD.md`** — markdown report with:
-     - **Summary** — files, rows, unique projects, plan-year range, human-reviewed count + %, and a **Label breakdown** (per-label share of reviewed).
-     - **Project Investment Check** — flagged-by-year and offenders.
-     - **Column Completeness** — city-wide and a combined per-file table.
-     - **Duplicate Projects Check.**
-     - **Review Records** — every row labeled incorrect / edited / deleted, with its note and full edit history.
+   - **`<City>_cip_long_MMDD.md`** — markdown report (see sections below).
+4. On success the page shows a confirmation, **renders the report inline**, and offers **Open CSV** and **Open report (.md)** buttons (open the files in your OS default apps).
+
+The report contains:
+- **Summary** — files, rows, unique projects, plan-year range, human-reviewed count + %, and a **Label breakdown** (per-label share of reviewed).
+- **Project Investment Check** — flagged-by-year and offenders.
+- **Column Completeness** — city-wide and a combined per-file table.
+- **Duplicate Projects Check.**
+- **Review Records** — every row labeled incorrect / edited / deleted, with its note and full edit history.
 
 ---
 
@@ -118,4 +124,6 @@ Renders this `README.md`. Edit the file and reload the tab to update it.
 - **Single-user, single-machine.** Two browsers on the same instance can overwrite each other's edits.
 - **Back up before bulk editing.** Edits write through to the CSV immediately — copy the city's `CSV/` folder somewhere safe before a heavy session.
 - **Adding a new city.** Drop a folder `CIPBD/<NewCity>/` containing `PDF/` and `CSV/`; reload any city dropdown and it appears.
+- **"Open" buttons** launch files in your OS default apps and only work because the server runs on the same machine as the browser (the intended setup).
+- **Customizing quick notes.** Edit `ValidationsTool/common_notes.md` (bullet items only); reopen the Manual Check tab to pick up changes.
 - **Restarting.** `lsof -ti:5050 | xargs kill -9` to stop, then `./ValidationsTool/run.sh` to start again.
