@@ -1214,7 +1214,12 @@ const p3ReportCard = document.getElementById('p3-report-card');
 let p3OutputPath = null;
 let p3ReportPath = null;
 
-p3City.addEventListener('change', () => { p3RunBtn.disabled = !p3City.value; });
+const p3ResetBtn = document.getElementById('p3-reset-btn');
+p3City.addEventListener('change', () => {
+  const hasCity = !!p3City.value;
+  p3RunBtn.disabled = !hasCity;
+  p3ResetBtn.disabled = !hasCity;
+});
 
 p3RunBtn.addEventListener('click', async () => {
   const city = p3City.value;
@@ -1264,6 +1269,59 @@ async function openFile(path) {
 }
 document.getElementById('p3-open-csv').addEventListener('click', () => openFile(p3OutputPath));
 document.getElementById('p3-open-md').addEventListener('click', () => openFile(p3ReportPath));
+
+// ── Remove all Validation Records (destructive, per-city) ────────────────────
+const resetModal = document.getElementById('reset-modal');
+const resetInput = document.getElementById('reset-input');
+const resetConfirmBtn = document.getElementById('reset-confirm');
+let resetExpectedPhrase = '';
+
+function openResetModal() {
+  const city = p3City.value;
+  if (!city) return;
+  resetExpectedPhrase = `RESET ${city}`;
+  document.getElementById('reset-modal-city').textContent = city;
+  document.getElementById('reset-phrase').textContent = resetExpectedPhrase;
+  resetInput.value = '';
+  resetConfirmBtn.disabled = true;
+  resetModal.classList.remove('hidden');
+  resetInput.focus();
+}
+function closeResetModal() {
+  resetModal.classList.add('hidden');
+}
+
+p3ResetBtn.addEventListener('click', openResetModal);
+document.getElementById('reset-cancel').addEventListener('click', closeResetModal);
+resetModal.addEventListener('click', (e) => {
+  if (e.target === resetModal) closeResetModal();  // click backdrop to close
+});
+resetInput.addEventListener('input', () => {
+  resetConfirmBtn.disabled = resetInput.value !== resetExpectedPhrase;
+});
+resetConfirmBtn.addEventListener('click', async () => {
+  const city = p3City.value;
+  if (!city) return;
+  resetConfirmBtn.disabled = true;
+  try {
+    const res = await api.post(`/api/cities/${encodeURIComponent(city)}/reset_validation`,
+                               { confirm: resetInput.value });
+    if (res && res.ok) {
+      showToast(`Reset done · ${res.jsons_removed} json removed, ${res.csvs_updated} CSVs updated`);
+      // Hide any stale combine result/report from this city
+      document.getElementById('p3-result').classList.add('hidden');
+      document.getElementById('p3-report-card').classList.add('hidden');
+      closeResetModal();
+    } else {
+      showToast((res && res.error) || 'Reset failed');
+      resetConfirmBtn.disabled = false;
+    }
+  } catch (e) {
+    showToast('Reset failed — see console');
+    console.error(e);
+    resetConfirmBtn.disabled = false;
+  }
+});
 
 // ── Boot ──────────────────────────────────────────────────────────────────
 loadCities();

@@ -1016,6 +1016,51 @@ def api_delete_row(city, stem, idx):
     return jsonify({'ok': True})
 
 
+@app.route('/api/cities/<city>/reset_validation', methods=['POST'])
+def api_reset_validation(city):
+    """DANGEROUS: per-city wipe of validation records.
+
+    - Deletes Validation/sample.json and every per-file <stem>.json (keeps edit_log.md).
+    - Drops validation_label and notes columns from every CSV in CSV/.
+    - Leaves CSV cell values, combine outputs, and PDFs untouched.
+
+    Requires body {"confirm": "RESET <City>"} matching exactly.
+    """
+    data = request.get_json() or {}
+    expected = f'RESET {city}'
+    if (data.get('confirm') or '').strip() != expected:
+        return jsonify({'error': f'Confirmation phrase must be exactly: {expected}'}), 400
+
+    city_dir = BASE_DIR / city
+    if not (city_dir / 'CSV').is_dir():
+        return jsonify({'error': 'City not found'}), 404
+
+    # 1. Remove per-file validation JSONs + sample.json (keep edit_log.md)
+    vdir = _val_dir(city)
+    jsons_removed = 0
+    if vdir.exists():
+        for jp in vdir.glob('*.json'):
+            try:
+                jp.unlink()
+                jsons_removed += 1
+            except OSError:
+                pass
+
+    # 2. Drop validation_label + notes columns from every CSV
+    csvs_updated = 0
+    for p in (city_dir / 'CSV').glob('*.csv'):
+        try:
+            df = pd.read_csv(p, dtype=str).fillna('')
+            drop = [c for c in (LABEL_COL, NOTES_COL) if c in df.columns]
+            if drop:
+                df.drop(columns=drop).to_csv(p, index=False)
+                csvs_updated += 1
+        except Exception as e:  # noqa: BLE001
+            print(f'[reset_validation] skipping {p.name}: {e}')
+
+    return jsonify({'ok': True, 'jsons_removed': jsons_removed, 'csvs_updated': csvs_updated})
+
+
 @app.route('/api/cities/<city>/validate')
 def api_validate(city):
     extra = request.args.get('extra', '')

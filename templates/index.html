@@ -272,6 +272,8 @@
       <select id="p3-city-select"><option value="">— select —</option></select>
     </label>
     <button id="p3-run-btn" disabled>Combine to Long CSV</button>
+    <button id="p3-reset-btn" class="danger-btn" disabled
+            title="Wipe all validation records for the selected city (destructive)">⚠ Remove all Validation Records</button>
     <span id="p3-spinner" class="spinner hidden"></span>
   </div>
 
@@ -310,6 +312,27 @@
   <article id="instructions-content" class="markdown-body">
     <p class="empty-state">Loading instructions…</p>
   </article>
+</div>
+
+<!-- Reset Validation Records modal (destructive) -->
+<div id="reset-modal" class="modal-overlay hidden">
+  <div class="modal-box">
+    <h3>⚠ Remove all Validation Records — <span id="reset-modal-city"></span></h3>
+    <p>This will permanently delete, <strong>for this city only</strong>:</p>
+    <ul>
+      <li><code>Validation/sample.json</code></li>
+      <li>Every per-file validation record (<code>Validation/&lt;stem&gt;.json</code>)</li>
+      <li>The <code>validation_label</code> and <code>notes</code> columns from every CSV</li>
+    </ul>
+    <p>Preserved: your CSV cell edits, <code>edit_log.md</code>, combine outputs, PDFs.</p>
+    <p class="muted">There is no undo. To confirm, type the phrase below exactly:</p>
+    <p><strong id="reset-phrase"></strong></p>
+    <input id="reset-input" type="text" autocomplete="off" placeholder="type the phrase to enable Confirm">
+    <div class="modal-actions">
+      <button id="reset-cancel">Cancel</button>
+      <button id="reset-confirm" class="danger-btn" disabled>Confirm reset</button>
+    </div>
+  </div>
 </div>
 
 <!-- Toast -->

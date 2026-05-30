@@ -514,6 +514,95 @@ table { font-size: 90%; }
   letter-spacing: 0.02em;
 }
 
+/* Destructive button (e.g. Remove all Validation Records, modal Confirm) */
+.danger-btn {
+  background: var(--bad);
+  color: #fff;
+  border: 1px solid var(--bad);
+  border-radius: 4px;
+  padding: 5px 14px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.danger-btn:hover:not(:disabled) { background: #82181d; border-color: #82181d; }
+.danger-btn:disabled {
+  background: var(--border);
+  border-color: var(--border);
+  color: var(--ink-muted);
+  cursor: default;
+}
+
+/* Modal overlay + dialog */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 14, 30, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+.modal-box {
+  background: var(--surface);
+  border-radius: 8px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.25);
+  padding: 22px 26px;
+  width: min(520px, 92vw);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: var(--ink);
+}
+.modal-box h3 {
+  font-size: 15px;
+  margin-bottom: 8px;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--bad);
+}
+.modal-box ul { padding-left: 22px; margin: 6px 0 10px; }
+.modal-box li { margin: 2px 0; }
+.modal-box code { background: var(--primary-tint); padding: 1px 5px; border-radius: 3px; font-size: 92%; }
+#reset-phrase {
+  display: inline-block;
+  padding: 2px 8px;
+  background: var(--bad-bg);
+  color: var(--bad);
+  border-radius: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+#reset-input {
+  width: 100%;
+  margin-top: 4px;
+  padding: 6px 9px;
+  font-family: inherit;
+  font-size: 12.5px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+}
+#reset-input:focus { outline: none; border-color: var(--bad); box-shadow: 0 0 0 2px var(--bad-bg); }
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 16px;
+}
+.modal-actions button {
+  padding: 5px 14px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 4px;
+  cursor: pointer;
+}
+#reset-cancel {
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--border-strong);
+}
+#reset-cancel:hover { background: var(--primary-tint); }
+
 /* Scope dropdown row (Section C) */
 .scope-row {
   display: flex;
