@@ -865,12 +865,16 @@ def api_combine(city):
             combined[c] = ''
 
     year_cols = sorted(c for c in combined.columns if c.startswith('year_'))
-    id_cols_ext = ID_COLS + [LABEL_COL, NOTES_COL]
+    # Any non-standard source columns this city has (e.g. status, description, tirz_program)
+    # are carried through too — kept in their original order, placed after the ID columns.
+    known = set(ID_COLS) | set(year_cols) | {LABEL_COL, NOTES_COL, 'source_file', 'plan_year', 'invest'}
+    extra_cols = [c for c in combined.columns if c not in known]
+    id_vars = ID_COLS + extra_cols + [LABEL_COL, NOTES_COL]
 
     # Pass 2: melt wide → long
-    wide_for_melt = combined[id_cols_ext + year_cols].copy()
+    wide_for_melt = combined[id_vars + year_cols].copy()
     long = wide_for_melt.melt(
-        id_vars=id_cols_ext, value_vars=year_cols,
+        id_vars=id_vars, value_vars=year_cols,
         var_name='plan_year', value_name='invest',
     )
     long['plan_year'] = long['plan_year'].str.replace('year_', '', regex=False)
@@ -882,7 +886,7 @@ def api_combine(city):
     long = long.sort_values(
         ['cip_year', 'department', 'project_id', 'plan_year']
     ).reset_index(drop=True)
-    long = long[id_cols_ext + ['plan_year', 'invest']]
+    long = long[ID_COLS + extra_cols + ['plan_year', 'invest', LABEL_COL, NOTES_COL]]
 
     # Generate output filename, never overwriting
     now = datetime.now()
