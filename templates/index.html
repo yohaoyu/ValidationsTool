@@ -11,7 +11,12 @@
 
 <!-- ── Navigation ─────────────────────────────────────────────────────────── -->
 <header>
-  <div class="app-title">Standardized CIP Database Validation Tool</div>
+  <div class="app-title">
+    <span class="app-title-text">Standardized CIP Database Validation Tool</span>
+    <label class="global-city">City:
+      <select id="global-city-select"><option value="">— select —</option></select>
+    </label>
+  </div>
   <nav class="nav-tabs">
     <button class="tab-btn active" data-page="page1">Quality Report</button>
     <button class="tab-btn" data-page="page2">Manual Check</button>
@@ -23,9 +28,6 @@
 <!-- ── Page 1: Automated Quality Dashboard ───────────────────────────────── -->
 <div id="page1" class="page active">
   <div class="toolbar">
-    <label>City:
-      <select id="p1-city-select"><option value="">— select —</option></select>
-    </label>
     <button id="p1-run-btn" disabled>Run Validation</button>
     <span id="p1-spinner" class="spinner hidden"></span>
   </div>
@@ -165,17 +167,14 @@
 <!-- ── Page 2: Manual Verification ──────────────────────────────────────────── -->
 <div id="page2" class="page hidden">
   <div class="toolbar toolbar-p2">
-    <label>City:
-      <select id="p2-city-select"><option value="">— select —</option></select>
-    </label>
     <label>File:
       <select id="p2-file-select" disabled><option value="">— select —</option></select>
     </label>
     <label>Project Name:
-      <input id="p2-name-filter" type="text" placeholder="filter…" disabled>
+      <input id="p2-name-filter" type="text" placeholder="filter…" title="Type (blank) to show rows with an empty project name" disabled>
     </label>
     <label>Project ID:
-      <input id="p2-id-filter" type="text" placeholder="filter…" disabled>
+      <input id="p2-id-filter" type="text" placeholder="filter…" title="Type (blank) to show rows with an empty project ID" disabled>
     </label>
     <label class="sample-pct" title="Sample percentage (1–100)">%:
       <input id="p2-sample-pct" type="number" value="3" min="1" max="100" step="1">
@@ -193,6 +192,10 @@
           <label><input type="checkbox" value="deleted"> deleted</label>
         </div>
       </span>
+    </label>
+    <label class="label-filter">Investment Check:
+      <button id="p2-offenders-filter-btn" type="button" disabled
+              title="Show only rows flagged as Offenders in the Project Investment Check (|residual| &gt; 2)">All rows</button>
     </label>
     <span id="p2-sample-info" class="muted hidden" style="margin-left:auto"></span>
   </div>
@@ -285,9 +288,6 @@
 <!-- ── Page 3: Combine by City ──────────────────────────────────────────────── -->
 <div id="page3" class="page hidden">
   <div class="toolbar">
-    <label>City:
-      <select id="p3-city-select"><option value="">— select —</option></select>
-    </label>
     <button id="p3-run-btn" disabled>Combine to Long CSV</button>
     <button id="p3-reset-btn" class="danger-btn" disabled
             title="Wipe all validation records for the selected city (destructive)">⚠ Remove all Validation Records</button>

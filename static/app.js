@@ -19,6 +19,8 @@ const state = {
   },
   p2Sample: { active: false, items: [], info: null },
   p2All: { active: false, items: [] },
+  // Offenders filter (Manual Check) — row keys flagged by the Project Investment Check
+  p2Offenders: { active: false, keys: null, count: 0, city: null },
   p2: {
     city: null,
     stem: null,
@@ -103,32 +105,37 @@ async function loadInstructions() {
 }
 
 // ── City loader ───────────────────────────────────────────────────────────
+// A single selector in the header is the city for all pages.
+const globalCitySelect = document.getElementById('global-city-select');
+
 async function loadCities() {
   const cities = await api.get('/api/cities');
-  ['p1-city-select', 'p2-city-select', 'p3-city-select'].forEach((id) => {
-    const sel = document.getElementById(id);
-    sel.innerHTML = '<option value="">— select —</option>';
-    cities.forEach((c) => {
-      const opt = document.createElement('option');
-      opt.value = c; opt.textContent = c;
-      sel.appendChild(opt);
-    });
+  globalCitySelect.innerHTML = '<option value="">— select —</option>';
+  cities.forEach((c) => {
+    const opt = document.createElement('option');
+    opt.value = c; opt.textContent = c;
+    globalCitySelect.appendChild(opt);
   });
 }
+
+// Fan the header's city out to Quality Report, Manual Check and Combine at once.
+globalCitySelect.addEventListener('change', () => {
+  const city = globalCitySelect.value;
+  p1RunBtn.disabled = !city;
+  state.p1.statusFilter = new Set();   // status values differ per city
+  p3RunBtn.disabled = !city;
+  p3ResetBtn.disabled = !city;
+  onP2CityChange(city);
+});
 
 // ═══════════════════════════════════════════════════════════════════════════
 // Page 1
 // ═══════════════════════════════════════════════════════════════════════════
-const p1City = document.getElementById('p1-city-select');
+const p1City = globalCitySelect;
 const p1RunBtn = document.getElementById('p1-run-btn');
 const p1Spinner = document.getElementById('p1-spinner');
 const p1Content = document.getElementById('p1-content');
 const p1Empty = document.getElementById('p1-empty');
-
-p1City.addEventListener('change', () => {
-  p1RunBtn.disabled = !p1City.value;
-  state.p1.statusFilter = new Set();   // status differs per city; reset on change
-});
 
 async function runP1Validation() {
   const city = p1City.value;
@@ -602,8 +609,7 @@ document.getElementById('p1-scope-next-btn').addEventListener('click', () => cyc
 
 async function navigateToPage2(city, cipYear, projectId, stem, rowIndex, projectName) {
   document.querySelector('[data-page="page2"]').click();
-  const p2CityEl = document.getElementById('p2-city-select');
-  p2CityEl.value = city;
+  globalCitySelect.value = city;
   await onP2CityChange(city);
   const files = await api.get(`/api/cities/${encodeURIComponent(city)}/files`);
   // Prefer the exact source file (handles file name ≠ cip_year column, e.g. DC).
@@ -644,12 +650,10 @@ async function navigateToPage2(city, cipYear, projectId, stem, rowIndex, project
 // ═══════════════════════════════════════════════════════════════════════════
 // Page 2
 // ═══════════════════════════════════════════════════════════════════════════
-const p2CitySelect = document.getElementById('p2-city-select');
 const p2FileSelect = document.getElementById('p2-file-select');
 const p2NameFilter = document.getElementById('p2-name-filter');
 const p2IdFilter = document.getElementById('p2-id-filter');
 
-p2CitySelect.addEventListener('change', () => onP2CityChange(p2CitySelect.value));
 p2FileSelect.addEventListener('change', () => {
   // Picking a file manually exits sample mode
   if (state.p2Sample.active) {
@@ -690,6 +694,69 @@ document.addEventListener('click', (e) => {
   if (!e.target.closest('.label-filter-box')) p2LabelFilterMenu.classList.add('hidden');
 });
 
+// ── Offenders filter — the rows Section B flags (|residual| > tolerance) ──
+// The offender set comes from the same endpoint the Quality Report uses, and
+// honours the "+ extra right-side columns" box on Page 1 so both agree.
+const p2OffendersBtn = document.getElementById('p2-offenders-filter-btn');
+
+function updateOffendersBtn() {
+  const on = state.p2Offenders.active;
+  p2OffendersBtn.classList.toggle('active', on);
+  p2OffendersBtn.textContent = on ? `Offenders only (${state.p2Offenders.count})` : 'All rows';
+}
+
+async function loadOffenderKeys() {
+  const city = state.p2.city;
+  if (!city) return;
+  if (state.p2Offenders.city === city && state.p2Offenders.keys) return;
+  const extra = (document.getElementById('p1-extra-cols').value || '').trim();
+  const params = new URLSearchParams();
+  if (extra) params.set('extra', extra);
+  const qs = params.toString();
+  const data = await api.get(
+    `/api/cities/${encodeURIComponent(city)}/validate${qs ? `?${qs}` : ''}`
+  );
+  const keys = new Set();
+  ((data && data.pass1 && data.pass1.offenders) || []).forEach((o) => {
+    if (o.stem != null && o.row_index != null) keys.add(`${o.stem}|${o.row_index}`);
+  });
+  state.p2Offenders.city = city;
+  state.p2Offenders.keys = keys;
+  state.p2Offenders.count = keys.size;
+}
+
+// True when the row passes the offenders filter (always true while it is off).
+function offenderMatch(stem, rowIndex) {
+  if (!state.p2Offenders.active) return true;
+  const keys = state.p2Offenders.keys;
+  if (!keys) return true;
+  return keys.has(`${stem}|${rowIndex}`);
+}
+
+p2OffendersBtn.addEventListener('click', async () => {
+  if (p2OffendersBtn.disabled) return;
+  if (state.p2Offenders.active) {
+    state.p2Offenders.active = false;
+  } else {
+    p2OffendersBtn.disabled = true;
+    p2OffendersBtn.textContent = 'Loading…';
+    try {
+      await loadOffenderKeys();
+    } catch (e) {
+      showToast('Could not load the Project Investment Check');
+      console.error(e);
+      p2OffendersBtn.disabled = false;
+      updateOffendersBtn();
+      return;
+    }
+    p2OffendersBtn.disabled = false;
+    state.p2Offenders.active = true;
+    if (state.p2Offenders.count === 0) showToast('No flagged rows for this city');
+  }
+  updateOffendersBtn();
+  renderRowList();
+});
+
 async function onP2CityChange(city) {
   state.p2.city = city || null;
   state.p2.stem = null;
@@ -711,6 +778,10 @@ async function onP2CityChange(city) {
   p2LabelFilterMenu.classList.add('hidden');
   updateLabelFilterBtn();
   p2LabelFilterBtn.disabled = true;
+  // The offender set is per city — drop it and switch the filter off
+  state.p2Offenders = { active: false, keys: null, count: 0, city: null };
+  p2OffendersBtn.disabled = true;
+  updateOffendersBtn();
   document.getElementById('p2-sample-btn').disabled = !city;
   clearRowDetail();
   resetPdf();
@@ -746,6 +817,7 @@ async function loadAllFiles() {
   p2NameFilter.disabled = false;
   p2IdFilter.disabled = false;
   p2LabelFilterBtn.disabled = false;
+  p2OffendersBtn.disabled = false;
   p2NameFilter.value = '';
   p2IdFilter.value = '';
   renderRowList();
@@ -776,6 +848,7 @@ async function onP2FileChange(stem) {
   p2NameFilter.disabled = false;
   p2IdFilter.disabled = false;
   p2LabelFilterBtn.disabled = false;
+  p2OffendersBtn.disabled = false;
   p2NameFilter.value = '';
   p2IdFilter.value = '';
   renderRowList();
@@ -816,13 +889,23 @@ function updateCrossFileItemLabel(stem, idx) {
 
 // Shared cross-file list renderer (used by both Sample and All-files modes).
 // Uses event delegation so thousands of rows don't each get a listener.
+// Name / ID filters: the literal query "(blank)" matches rows whose value is
+// empty (handy for finding unnamed or unnumbered projects); any other query is
+// a case-insensitive substring match. `q` is already lower-cased by the caller.
+function textFilterMatch(q, value) {
+  const v = String(value ?? '');
+  if (q === '(blank)') return v.trim() === '';
+  return v.toLowerCase().includes(q);
+}
+
 function renderCrossFileList(items, emptyMsg) {
   const listEl = document.getElementById('p2-row-list');
   const nameQ = p2NameFilter.value.toLowerCase();
   const idQ = p2IdFilter.value.toLowerCase();
   const filtered = items.filter((r) => {
-    if (nameQ && !(r.project_name || '').toLowerCase().includes(nameQ)) return false;
-    if (idQ && !(r.project_id || '').toLowerCase().includes(idQ)) return false;
+    if (nameQ && !textFilterMatch(nameQ, r.project_name)) return false;
+    if (idQ && !textFilterMatch(idQ, r.project_id)) return false;
+    if (!offenderMatch(r.file_stem, r.row_index)) return false;
     if (p2LabelFilter.size) {
       // Live label for the loaded file; otherwise the label stored on the item
       const lbl = state.p2.stem === r.file_stem
@@ -870,8 +953,9 @@ function renderRowList() {
 
   // Normal (single-file) mode
   const filtered = state.p2.rows.filter((r) => {
-    if (nameQ && !r.project_name.toLowerCase().includes(nameQ)) return false;
-    if (idQ && !r.project_id.toLowerCase().includes(idQ)) return false;
+    if (nameQ && !textFilterMatch(nameQ, r.project_name)) return false;
+    if (idQ && !textFilterMatch(idQ, r.project_id)) return false;
+    if (!offenderMatch(state.p2.stem, r.index)) return false;
     if (p2LabelFilter.size && !p2LabelFilter.has(labelFor(state.p2.validations[r.index]))) return false;
     return true;
   });
@@ -896,6 +980,26 @@ function renderRowList() {
     el.addEventListener('click', () => selectRow(Number(el.dataset.idx)));
   });
 }
+
+// ↑/↓ moves the selection through the visible (filtered) list once a row is selected.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+  const page2 = document.getElementById('page2');
+  if (!page2 || !page2.classList.contains('active')) return;
+  if (state.p2.selectedRow === null || state.p2.selectedRow === undefined) return;
+  // Don't hijack arrows while typing in a field or dropdown
+  const t = e.target;
+  if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return;
+
+  const items = [...document.querySelectorAll('#p2-row-list .row-item')];
+  const cur = items.findIndex((el) => el.classList.contains('selected'));
+  if (cur === -1) return;
+  const next = cur + (e.key === 'ArrowDown' ? 1 : -1);
+  if (next < 0 || next >= items.length) return;
+  e.preventDefault();
+  items[next].scrollIntoView({ block: 'nearest' });
+  items[next].click();
+});
 
 // Delegated click handler for cross-file rows (Sample / All files) — set up once.
 document.getElementById('p2-row-list').addEventListener('click', (e) => {
@@ -1495,7 +1599,7 @@ function setupResizers() {
 // ═══════════════════════════════════════════════════════════════════════════
 // Page 3 — Combine
 // ═══════════════════════════════════════════════════════════════════════════
-const p3City = document.getElementById('p3-city-select');
+const p3City = globalCitySelect;
 const p3RunBtn = document.getElementById('p3-run-btn');
 const p3Spinner = document.getElementById('p3-spinner');
 const p3Result = document.getElementById('p3-result');
@@ -1504,12 +1608,6 @@ let p3OutputPath = null;
 let p3ReportPath = null;
 
 const p3ResetBtn = document.getElementById('p3-reset-btn');
-p3City.addEventListener('change', () => {
-  const hasCity = !!p3City.value;
-  p3RunBtn.disabled = !hasCity;
-  p3ResetBtn.disabled = !hasCity;
-});
-
 p3RunBtn.addEventListener('click', async () => {
   const city = p3City.value;
   if (!city) return;

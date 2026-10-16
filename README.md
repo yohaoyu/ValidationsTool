@@ -8,6 +8,22 @@ A single-machine web tool for inspecting, validating, editing, and combining Cap
 
 ## What's New
 
+### October 16, 2026
+
+- **One city selector for the whole tool** — the City dropdown now sits at the right end of the
+  title bar and drives **Quality Report, Manual Check and Combine** together. Pick a city once;
+  the per-page City pickers are gone.
+- **Offenders filter in Manual Check** — an **Investment Check** toggle next to the Validation
+  Label filter. Click **All rows** to switch it to **Offenders only (N)** and the project list
+  narrows to exactly the rows Section B flags (`|residual| > 2`). It combines with the Project
+  Name / Project ID / Validation Label filters, works in single-file, All-files and Sample modes,
+  and honours the **+ extra right-side columns** box on Page 1 so the two pages always agree.
+  The set is fetched once per city and reset when the city changes.
+
+### August 24, 2026
+
+- **Find blank fields in Manual Check** — typing `(blank)` in the **Project Name** filter now lists the rows with an empty name, matching the behaviour the **Project ID** filter already had.
+
 ### June 16, 2026
 
 - **Combine keeps everything** — the long-format output now carries `validation_label` and `notes` (after `plan_year` / `invest`) **and** any city-specific extra columns (e.g. `status`, `total_unfunded`). Rows marked `deleted` are still excluded.
@@ -71,7 +87,7 @@ Cities are discovered automatically — any folder under `CIPBD/` that contains 
 
 ## Page 1 · Quality Report
 
-Pick a city and click **Run Validation**. (The City / Run bar stays pinned to the top as you scroll.) Rows marked `deleted` are excluded from the whole report.
+Pick a city in the title bar and click **Run Validation**. (The City / Run bar stays pinned to the top as you scroll.) Rows marked `deleted` are excluded from the whole report.
 
 - **A · Load Summary** — file count, total rows, unique project IDs, plan-year span. **Show more / Show less** expands the file list when it overflows.
 - **B · Project Investment Check** — checks `project_total ≈ previous_appropriations + sum(year_*)`; rows where `|residual| > 2` ($K) are flagged.
@@ -89,12 +105,12 @@ Pick a city and click **Run Validation**. (The City / Run bar stays pinned to th
 
 Side-by-side verification — CSV row on the left, source PDF page on the right.
 
-1. **Pick a city.** The **File** dropdown defaults to **All files**, so every project across all files shows immediately (each row carries a file tag). Choose a specific file to narrow to it, or use **Sample**. If a saved sample exists, a banner shows its creation time and % validated, with a **Load saved sample** button.
+1. **Pick a city** in the title bar (it is shared with the Quality Report and Combine pages). The **File** dropdown defaults to **All files**, so every project across all files shows immediately (each row carries a file tag). Choose a specific file to narrow to it, or use **Sample**. If a saved sample exists, a banner shows its creation time and % validated, with a **Load saved sample** button.
 2. **Click a row** → the PDF jumps to that row's `source_page`. PDF controls: **◀ Prev / Next ▶**, a page-number box, **↻ Rotate** (90° clockwise), **Adjust** (a page offset added to `source_page` when opening a row — default `0`, use e.g. `+2` when the PDF's physical pages are shifted), and **Open Current PDF** (opens the file in your OS default app).
 3. **Edit a cell** → type into any value in *Project Information*, then **Save Edits** (next to **Open Current CSV**, which opens the file in your OS default app). The CSV is rewritten in place; the change is appended to `Validation/edit_log.md` and the row's `Validation/<stem>.json` record (with timestamps). A compact **Σ year_* · Residual** row at the bottom of the panel recomputes live as you edit (residual turns red when `|residual| > 2`).
 4. **Record a verdict** → **✓ Correct** or **✗ Incorrect** (saved immediately). Add an optional **note** (saved on blur).
 5. **Delete a project** → the **More** dropdown → *Delete project* → type a **required note** → **Confirm delete**. This is a soft delete (the row stays in the CSV but is labeled `deleted` and excluded from Combine and the Quality Report).
-6. **Filters**: **Project Name**, **Project ID**, and **Validation Label** (multi-select: validated / edited / incorrect / deleted) narrow the list in real time.
+6. **Filters**: **Project Name**, **Project ID**, **Validation Label** (multi-select: validated / edited / incorrect / deleted), and **Investment Check** narrow the list in real time. The **Investment Check** toggle flips between **All rows** and **Offenders only (N)** — the rows flagged by the Project Investment Check (Section B), using the same equation and the same **+ extra right-side columns** setting as Page 1. In the **Project Name** and **Project ID** boxes, the literal query `(blank)` lists the rows whose name / ID is empty — the way to find unnamed or unnumbered projects, which a substring search cannot match.
 
 Both note fields (verdict and delete) have a **+ Common note…** dropdown for quick-picking frequent notes; selecting one inserts (or appends) its text, and you can still type freely. Manage these in `ValidationsTool/common_notes.md` — each `- bullet` line becomes an option (headers and paragraphs are ignored).
 
@@ -120,7 +136,7 @@ Drag the **vertical** purple bar between the left panel and the PDF to change PD
 
 ## Page 3 · Combine
 
-1. Pick a city, click **Combine to Long CSV**.
+1. Pick a city in the title bar, click **Combine to Long CSV**.
 2. Reads every CSV in `<City>/CSV/`, concatenates them, drops rows labeled `deleted`, then pivots `year_*` columns into long-format `(plan_year, invest)` rows (blank / zero allocations dropped).
 3. Writes two timestamped files into `<City>/` (never overwriting — adds `_HHMM` / `_HHMMSS` if needed):
    - **`<City>_cip_long_MMDD.csv`** — long-format data. Columns: the standard ID columns, any **extra city-specific columns**, then `plan_year`, `invest`, `validation_label`, `notes`.
