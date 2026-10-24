@@ -111,12 +111,28 @@ const globalCitySelect = document.getElementById('global-city-select');
 async function loadCities() {
   const cities = await api.get('/api/cities');
   globalCitySelect.innerHTML = '<option value="">— select —</option>';
+  // Keys are 'Group/City' (group = the folder listed in groups.json); show one
+  // <optgroup> per folder. Cities with no group (folder ".") go at the top.
+  const groups = new Map();
   cities.forEach((c) => {
-    const opt = document.createElement('option');
-    opt.value = c; opt.textContent = c;
-    globalCitySelect.appendChild(opt);
+    const i = c.lastIndexOf('/');
+    const group = i < 0 ? '' : c.slice(0, i);
+    if (!groups.has(group)) groups.set(group, []);
+    groups.get(group).push({ key: c, name: c.slice(i + 1) });
+  });
+  groups.forEach((items, group) => {
+    const parent = group ? document.createElement('optgroup') : globalCitySelect;
+    if (group) { parent.label = group; globalCitySelect.appendChild(parent); }
+    items.forEach(({ key, name }) => {
+      const opt = document.createElement('option');
+      opt.value = key; opt.textContent = name;
+      parent.appendChild(opt);
+    });
   });
 }
+
+// 'Works/Seattle' -> 'Seattle' (for download file names)
+const cityName = (city) => city.slice(city.lastIndexOf('/') + 1);
 
 // Fan the header's city out to Quality Report, Manual Check and Combine at once.
 globalCitySelect.addEventListener('change', () => {
@@ -204,7 +220,7 @@ document.getElementById('p1-offenders-export').addEventListener('click', () => {
     r.notes ?? '',
   ]);
   const city = state.p1.city || 'city';
-  downloadText(`${city}_offenders_${offs.length}.csv`, toCsv(headers, rows));
+  downloadText(`${cityName(city)}_offenders_${offs.length}.csv`, toCsv(headers, rows));
 });
 
 p1RunBtn.addEventListener('click', runP1Validation);
@@ -1438,6 +1454,9 @@ const pdfNext = document.getElementById('pdf-next');
 const pdfRotate = document.getElementById('pdf-rotate');
 const pdfAdjust = document.getElementById('pdf-adjust');
 const pdfOpenBtn = document.getElementById('pdf-open-btn');
+const pdfZoomLabel = document.getElementById('pdf-zoom-label');
+const pdfFit = document.getElementById('pdf-fit');
+const pdfScroller = document.querySelector('.pdf-container');
 
 async function loadPdf(url) {
   state.pdf.url = url;
@@ -1445,6 +1464,7 @@ async function loadPdf(url) {
   state.pdf.currentPage = 1;
   state.pdf.totalPages = 0;
   state.pdf.rotation = 0;
+  state.pdf.scale = null;   // null = fit the panel
   pdfCanvas.style.display = 'none';
   pdfPlaceholder.classList.remove('hidden');
   pdfPlaceholder.textContent = 'Loading PDF…';
@@ -1463,26 +1483,47 @@ async function loadPdf(url) {
   }
 }
 
-async function renderPage(num) {
-  if (!state.pdf.doc || state.pdf.rendering) return;
+// Draws the current page. A request that arrives mid-draw is drawn right after, so page flips and
+// zooms are never dropped. `showing` (from pdf-zoom.js) runs just before the new drawing appears.
+async function renderPage(num, showing) {
+  if (!state.pdf.doc) return;
   const n = Math.max(1, Math.min(num, state.pdf.totalPages));
   state.pdf.currentPage = n;
   pdfPageInput.value = n;
   pdfPrev.disabled = n <= 1;
   pdfNext.disabled = n >= state.pdf.totalPages;
-  state.pdf.rendering = true;
-  try {
-    const page = await state.pdf.doc.getPage(n);
-    const container = document.querySelector('.pdf-container');
-    const containerWidth = container.clientWidth - 36;
-    const rot = state.pdf.rotation || 0;
-    const unscaled = page.getViewport({ scale: 1, rotation: rot });
-    const scale = Math.min(containerWidth / unscaled.width, 2.5);
-    const vp = page.getViewport({ scale, rotation: rot });
-    pdfCanvas.width = vp.width;
-    pdfCanvas.height = vp.height;
-    await page.render({ canvasContext: pdfCanvas.getContext('2d'), viewport: vp }).promise;
-  } finally { state.pdf.rendering = false; }
+  if (showing) state.pdf.showing = showing;
+  if (state.pdf.rendering) { state.pdf.again = true; return state.pdf.rendering; }
+  state.pdf.rendering = (async () => {
+    do {
+      state.pdf.again = false;
+      const doc = state.pdf.doc;
+      const pageNum = state.pdf.currentPage;
+      const page = await doc.getPage(pageNum);
+      const rot = state.pdf.rotation || 0;
+      const unscaled = page.getViewport({ scale: 1, rotation: rot });
+      // As wide as the panel but never larger than real size, unless zoomed by hand.
+      const scale = state.pdf.scale || PdfZoom.fitScale(pdfScroller.clientWidth - 36, unscaled.width);
+      const vp = page.getViewport({ scale, rotation: rot });
+      const dpr = window.devicePixelRatio || 1;   // sharp on Retina screens
+      const off = document.createElement('canvas');   // draw off screen, then swap: no blank flash
+      off.width = Math.floor(vp.width * dpr);
+      off.height = Math.floor(vp.height * dpr);
+      await page.render({ canvasContext: off.getContext('2d'), viewport: vp, transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : null }).promise;
+      if (state.pdf.doc !== doc) break;   // another PDF was opened meanwhile
+      if (state.pdf.again) continue;      // a newer request came in: draw that one instead
+      if (state.pdf.showing) { state.pdf.showing(); state.pdf.showing = null; }
+      pdfCanvas.width = off.width;
+      pdfCanvas.height = off.height;
+      pdfCanvas.style.width = `${Math.floor(vp.width)}px`;
+      pdfCanvas.style.height = `${Math.floor(vp.height)}px`;
+      pdfCanvas.getContext('2d').drawImage(off, 0, 0);
+      pdfCanvas.dataset.page = String(pageNum);
+      state.pdf.shownScale = scale;
+      pdfZoomLabel.textContent = PdfZoom.percent(scale);   // 100% = real size
+    } while (state.pdf.again);
+  })();
+  try { await state.pdf.rendering; } finally { state.pdf.rendering = null; }
 }
 
 function gotoPage(n) { renderPage(n); }
@@ -1492,6 +1533,7 @@ function setPdfNavEnabled(enabled) {
   pdfPrev.disabled = !enabled || state.pdf.currentPage <= 1;
   pdfNext.disabled = !enabled || state.pdf.currentPage >= state.pdf.totalPages;
   pdfRotate.disabled = !enabled;
+  pdfFit.disabled = !enabled;
   pdfOpenBtn.disabled = !enabled;
 }
 
@@ -1501,6 +1543,9 @@ function resetPdf() {
   state.pdf.currentPage = 1;
   state.pdf.totalPages = 0;
   state.pdf.rotation = 0;
+  state.pdf.scale = null;
+  state.pdf.shownScale = 0;
+  pdfZoomLabel.textContent = '—';
   pdfCanvas.style.display = 'none';
   pdfPlaceholder.classList.remove('hidden');
   pdfPlaceholder.textContent = 'PDF will appear here.';
@@ -1515,6 +1560,25 @@ pdfRotate.addEventListener('click', () => {
   if (!state.pdf.doc) return;
   state.pdf.rotation = ((state.pdf.rotation || 0) + 90) % 360;
   renderPage(state.pdf.currentPage);
+});
+pdfFit.addEventListener('click', () => {
+  if (!state.pdf.doc) return;
+  state.pdf.scale = null;
+  renderPage(state.pdf.currentPage);
+});
+// Zoom wheel / pinch / ⌘± over the page zoom the PDF around the pointer (see pdf-zoom.js).
+PdfZoom.attach(pdfScroller, pdfCanvas, {
+  getScale: () => (state.pdf.doc ? state.pdf.shownScale || 0 : 0),
+  setScale: (s, showing) => { state.pdf.scale = s; return renderPage(state.pdf.currentPage, showing); },
+  fit: () => pdfFit.click(),
+  pages: () => (state.pdf.shownScale ? [pdfCanvas] : []),
+  onPreview: (s) => { pdfZoomLabel.textContent = PdfZoom.percent(s); },
+  min: 0.3,
+  max: 4,
+});
+// Re-fit when the panel changes size (window or divider), unless zoomed by hand.
+PdfZoom.onResize(pdfScroller, () => {
+  if (state.pdf.doc && !state.pdf.scale && pdfScroller.clientWidth > 100) renderPage(state.pdf.currentPage);
 });
 // Page adjust: offset applied to a row's source_page when opening it
 pdfAdjust.addEventListener('change', () => {

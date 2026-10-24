@@ -8,6 +8,20 @@ A single-machine web tool for inspecting, validating, editing, and combining Cap
 
 ## What's New
 
+### October 17, 2026
+
+- **City groups** — cities are grouped in the City dropdown by the folder they sit in
+  (e.g. **Works**, **From RAs**); the group name is the folder name. Which folders appear, and
+  in what order, is set in `ValidationsTool/groups.json`:
+  ```json
+  { "folders": ["Works", "From RAs"] }
+  ```
+  Paths are relative to `CIPBD/` (nested folders like `"From RAs/To Runyan"` work; `"."` means
+  cities sitting directly in `CIPBD/`). A city is any folder in a listed group with both `PDF/`
+  and `CSV/`. Edit the file and reload the page — no restart needed. Without the file, every
+  top-level folder that holds a city is shown. The same city name can appear in two groups;
+  they are kept separate.
+
 ### October 16, 2026
 
 - **One city selector for the whole tool** — the City dropdown now sits at the right end of the
@@ -61,25 +75,27 @@ This frees port 5050 if needed, starts Flask, and opens `http://localhost:5050` 
 
 ```
 CIPBD/
-  <City>/                              ← one folder per city
-    PDF/                               ← source CIP PDFs
-    CSV/                               ← parsed CSVs (one per PDF)
-    Validation/                        ← review artifacts for this city
-      <stem>.json                      ← per-row verdicts, notes, edit history
-      edit_log.md                      ← timestamped CSV edits & deletions
-      sample.json                      ← saved random sample
-    <City>_cip_long_MMDD.csv           ← long-format combine output
-    <City>_cip_long_MMDD.md            ← companion markdown report
+  <Group>/                             ← a folder listed in ValidationsTool/groups.json (e.g. Works)
+    <City>/                            ← one folder per city
+      PDF/                             ← source CIP PDFs
+      CSV/                             ← parsed CSVs (one per PDF)
+      Validation/                      ← review artifacts for this city
+        <stem>.json                    ← per-row verdicts, notes, edit history
+        edit_log.md                    ← timestamped CSV edits & deletions
+        sample.json                    ← saved random sample
+      <City>_cip_long_MMDD.csv         ← long-format combine output
+      <City>_cip_long_MMDD.md          ← companion markdown report
   ValidationsTool/                     ← this tool
     app.py
     README.md                          ← what you're reading now
     common_notes.md                    ← editable quick-pick notes (see Manual Check)
+    groups.json                        ← which group folders show in the City dropdown
     requirements.txt
     run.sh
     static/ · templates/
 ```
 
-Cities are discovered automatically — any folder under `CIPBD/` that contains both a `PDF/` and a `CSV/` subfolder appears in every city dropdown.
+Cities are discovered automatically — any folder inside a group listed in `groups.json` that contains both a `PDF/` and a `CSV/` subfolder appears in the City dropdown, under its group's name.
 
 > **Note on year naming:** the report groups by the `cip_year` **column**, while the File dropdown lists file **names**. In some datasets (e.g. DC) the file name is offset from the `cip_year` column (`2011.csv` holds `cip_year` 2012). Clicking a project from the report always opens the exact source row, so the list and detail stay consistent regardless of this offset.
 

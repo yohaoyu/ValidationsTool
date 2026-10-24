@@ -9,7 +9,7 @@ import numpy as np
 import pandas as pd
 from pathlib import Path
 from datetime import datetime
-from flask import Flask, jsonify, request, send_file, render_template
+from flask import Flask, jsonify, request, send_file, render_template, abort
 
 TOOL_DIR = Path(__file__).parent            # ValidationsTool/
 BASE_DIR = TOOL_DIR.parent                  # CIPBD/  (city folders, combine outputs)
@@ -143,12 +143,44 @@ def safe(val):
     return val
 
 
+GROUPS_FILE = TOOL_DIR / 'groups.json'
+
+
+def _is_city_dir(p):
+    return p.is_dir() and (p / 'PDF').is_dir() and (p / 'CSV').is_dir()
+
+
+def get_groups():
+    """Group folders to show, in order, from groups.json (re-read on every call).
+
+    Each entry is a folder path relative to CIPBD/ ("." = cities sitting directly
+    in CIPBD/). The folder name is the group name. Without a config file, every
+    top-level folder that holds at least one city is shown.
+    """
+    try:
+        folders = json.loads(GROUPS_FILE.read_text(encoding='utf-8')).get('folders') or []
+    except FileNotFoundError:
+        folders = ['.'] + [p.name for p in sorted(BASE_DIR.iterdir())
+                           if p.is_dir() and p != TOOL_DIR and not _is_city_dir(p)]
+    return [str(f).strip().strip('/') or '.' for f in folders]
+
+
 def get_cities():
+    """City keys as paths relative to CIPBD/, e.g. 'Works/Seattle' (or 'Seattle' for '.')."""
     cities = []
-    for p in sorted(BASE_DIR.iterdir()):
-        if p.is_dir() and (p / 'PDF').is_dir() and (p / 'CSV').is_dir():
-            cities.append(p.name)
+    for group in get_groups():
+        gdir = BASE_DIR / group
+        if not gdir.is_dir():
+            continue
+        for p in sorted(gdir.iterdir()):
+            if _is_city_dir(p):
+                cities.append(p.name if group == '.' else f'{group}/{p.name}')
     return cities
+
+
+def city_name(city):
+    """Display / file-name part of a city key: 'Works/Seattle' -> 'Seattle'."""
+    return Path(city).name
 
 
 def get_files(city):
@@ -165,7 +197,7 @@ def run_validation(city, extra_cols=None, status_filter=None):
     extra_cols = extra_cols or []
     status_filter = status_filter or []
     csv_dir = BASE_DIR / city / 'CSV'
-    city_slug = city.lower().replace(' ', '_')
+    city_slug = city_name(city).lower().replace(' ', '_')
     exclude = {f'{city_slug}_cip_quality_issues.csv', f'{city_slug}_cip_long.csv'}
     csv_files = sorted(p for p in csv_dir.glob('*.csv') if p.name not in exclude)
 
@@ -451,6 +483,13 @@ def run_validation(city, extra_cols=None, status_filter=None):
 app = Flask(__name__)
 
 
+@app.url_value_preprocessor
+def _check_city(endpoint, values):
+    # <path:city> accepts slashes, so only resolve cities from the configured groups.
+    if values and 'city' in values and values['city'] not in get_cities():
+        abort(404, description=f"Unknown city: {values['city']}")
+
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -461,18 +500,18 @@ def api_cities():
     return jsonify(get_cities())
 
 
-@app.route('/api/cities/<city>/files')
+@app.route('/api/cities/<path:city>/files')
 def api_files(city):
     return jsonify(get_files(city))
 
 
-@app.route('/api/cities/<city>/pdf/<path:filename>')
+@app.route('/api/cities/<path:city>/pdf/<path:filename>')
 def api_pdf(city, filename):
     pdf_path = BASE_DIR / city / 'PDF' / filename
     return send_file(pdf_path, mimetype='application/pdf')
 
 
-@app.route('/api/cities/<city>/csv/<stem>/rows')
+@app.route('/api/cities/<path:city>/csv/<stem>/rows')
 def api_csv_rows(city, stem):
     files = get_files(city)
     match = next((f for f in files if f['stem'] == stem), None)
@@ -492,7 +531,7 @@ def api_csv_rows(city, stem):
     return jsonify(rows)
 
 
-@app.route('/api/cities/<city>/all_rows')
+@app.route('/api/cities/<path:city>/all_rows')
 def api_all_rows(city):
     """Every row across all of the city's files (for the 'All files' view)."""
     items = []
@@ -514,7 +553,7 @@ def api_all_rows(city):
     return jsonify(items)
 
 
-@app.route('/api/cities/<city>/csv/<stem>/row/<int:idx>')
+@app.route('/api/cities/<path:city>/csv/<stem>/row/<int:idx>')
 def api_csv_row(city, stem, idx):
     files = get_files(city)
     match = next((f for f in files if f['stem'] == stem), None)
@@ -532,7 +571,7 @@ def api_csv_row(city, stem, idx):
     })
 
 
-@app.route('/api/cities/<city>/csv/<stem>/row/<int:idx>', methods=['POST'])
+@app.route('/api/cities/<path:city>/csv/<stem>/row/<int:idx>', methods=['POST'])
 def api_update_csv_row(city, stem, idx):
     data = request.get_json() or {}
     updates = data.get('updates', {})
@@ -631,7 +670,7 @@ def generate_combine_report(city, validation, csv_name, deleted_total=0):
     L = []
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     L += [
-        f'## {city} CIP Combine Report',
+        f'## {city_name(city)} CIP Combine Report',
         '',
         f'**Generated:** {now_str}',
         f'**Output CSV:** `{csv_name}`',
@@ -833,15 +872,15 @@ def generate_combine_report(city, validation, csv_name, deleted_total=0):
     return '\n'.join(L)
 
 
-@app.route('/api/cities/<city>/combine', methods=['POST'])
+@app.route('/api/cities/<path:city>/combine', methods=['POST'])
 def api_combine(city):
     csv_dir = BASE_DIR / city / 'CSV'
-    city_slug = city.lower().replace(' ', '_')
+    city_slug = city_name(city).lower().replace(' ', '_')
     exclude_suffixes = ('_cip_quality_issues.csv', '_cip_long.csv')
     csv_files = sorted(
         p for p in csv_dir.glob('*.csv')
         if not any(p.name.endswith(s) for s in exclude_suffixes)
-        and not p.name.startswith(f'{city}_cip_long_')
+        and not p.name.startswith(f'{city_name(city)}_cip_long_')
         and not p.name.startswith(f'{city_slug}_cip_long_')
     )
 
@@ -891,7 +930,7 @@ def api_combine(city):
     # Generate output filename, never overwriting
     now = datetime.now()
     city_dir = BASE_DIR / city
-    base = f'{city}_cip_long'
+    base = f'{city_name(city)}_cip_long'
     candidates = [
         f'{base}_{now:%m%d}.csv',
         f'{base}_{now:%m%d_%H%M}.csv',
@@ -963,7 +1002,7 @@ def api_open_file():
     return _os_open(raw)
 
 
-@app.route('/api/cities/<city>/open_source', methods=['POST'])
+@app.route('/api/cities/<path:city>/open_source', methods=['POST'])
 def api_open_source(city):
     """Open the current file's CSV or PDF for a given stem in the OS default app."""
     data = request.get_json() or {}
@@ -979,7 +1018,7 @@ def api_open_source(city):
     return jsonify({'error': 'kind must be csv or pdf'}), 400
 
 
-@app.route('/api/validations/<city>/<stem>')
+@app.route('/api/validations/<path:city>/<stem>')
 def api_get_validations(city, stem):
     val_path = _val_dir(city) / f'{stem}.json'
     if not val_path.exists():
@@ -992,6 +1031,8 @@ def api_get_validations(city, stem):
 def api_save_validation():
     data = request.get_json()
     city = data.get('city')
+    if city not in get_cities():
+        abort(404, description=f'Unknown city: {city}')
     stem = data.get('file_stem')
     val_dir = _val_dir(city)
     val_dir.mkdir(parents=True, exist_ok=True)
@@ -1031,7 +1072,7 @@ def api_save_validation():
     return jsonify({'ok': True})
 
 
-@app.route('/api/cities/<city>/csv/<stem>/row/<int:idx>/delete', methods=['POST'])
+@app.route('/api/cities/<path:city>/csv/<stem>/row/<int:idx>/delete', methods=['POST'])
 def api_delete_row(city, stem, idx):
     data = request.get_json() or {}
     note = (data.get('note') or '').strip()
@@ -1080,7 +1121,7 @@ def api_delete_row(city, stem, idx):
     return jsonify({'ok': True})
 
 
-@app.route('/api/cities/<city>/bulk_delete', methods=['POST'])
+@app.route('/api/cities/<path:city>/bulk_delete', methods=['POST'])
 def api_bulk_delete(city):
     """Soft-delete many rows at once (label='deleted'). Body: {rows:[{stem,row_index}], note}."""
     data = request.get_json() or {}
@@ -1148,7 +1189,7 @@ def api_bulk_delete(city):
     return jsonify({'ok': True, 'deleted': deleted})
 
 
-@app.route('/api/cities/<city>/reset_validation', methods=['POST'])
+@app.route('/api/cities/<path:city>/reset_validation', methods=['POST'])
 def api_reset_validation(city):
     """DANGEROUS: per-city wipe of validation records.
 
@@ -1193,7 +1234,7 @@ def api_reset_validation(city):
     return jsonify({'ok': True, 'jsons_removed': jsons_removed, 'csvs_updated': csvs_updated})
 
 
-@app.route('/api/cities/<city>/validate')
+@app.route('/api/cities/<path:city>/validate')
 def api_validate(city):
     extra = request.args.get('extra', '')
     extra_cols = [c.strip() for c in extra.split(',') if c.strip()]
@@ -1281,7 +1322,7 @@ def _generate_sample(city, percent=3.0, seed=None):
     }
 
 
-@app.route('/api/cities/<city>/sample', methods=['GET', 'POST'])
+@app.route('/api/cities/<path:city>/sample', methods=['GET', 'POST'])
 def api_sample(city):
     """POST = generate a new sample (overwrites existing); GET = read saved sample.
 

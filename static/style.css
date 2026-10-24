@@ -1,18 +1,30 @@
 /* ── Fluent UI inspired theme ─────────────────────────────────────────────── */
 
 :root {
-  --primary: #32006e;          /* deep purple */
-  --primary-hover: #4a1a8a;
-  --primary-soft: #eeebee;     /* link underline */
-  --primary-soft-hover: rgb(212, 192, 236);
-  --primary-tint: #f5f0fa;     /* subtle background */
+  --primary: #32006e;          /* Husky Purple, as in the Obsidian theme */
+  --primary-hover: #260055;
+  --primary-soft: #f6f4f6;     /* link underline */
+  --primary-soft-hover: #dfd6f0;   /* UW Accent Lavender, lightened */
+  --primary-tint: #fcfafd;     /* subtle background */
   --ink: #222;
-  --ink-soft: #555;
-  --ink-muted: #8a8a8a;
-  --border: #e1dfe6;
-  --border-strong: #c9c5d1;
+  --ink-soft: #444;
+  --ink-muted: #777;
+  --border: #eeedf1;
+  --border-strong: #e1dfe6;
   --surface: #ffffff;
-  --bg: #f7f5fa;
+  --bg: #fdfdfe;
+  /* Husky Purple into navy, even steps in OKLCH (URBAN 520 ch. 08's dice palette, the navy a touch deeper) */
+  --ramp: #32006e, #310872, #2f1076, #2d167a, #2a1c7d, #272281, #232784, #1e2c86, #183189;
+  --bar: linear-gradient(90deg, var(--ramp));
+  --bg-page: #fff;   /* white paper, as on the course site */
+  --heading: #27262b;   /* card titles in the course site's heading grey */
+  --card-shadow: 0 1px 6px rgba(0, 0, 0, .07), 0 2px 6px rgba(0, 0, 0, .05);   /* the course site's cards */
+  --h3: #183189;
+  --motion-fast: 120ms;   /* motion as in the Observer theme for Obsidian: Fluent durations and curves */
+  --motion-mid: 180ms;
+  --motion-slow: 260ms;
+  --ease: cubic-bezier(0.33, 0, 0.67, 1);
+  --ease-out: cubic-bezier(0.1, 0.9, 0.2, 1);
   --good: #107c10;
   --good-bg: #dff6dd;
   --bad: #a4262c;
@@ -24,10 +36,11 @@
 
 html, body {
   font-family: "Avenir", -apple-system, system-ui, 'Segoe UI', Arial, sans-serif;
-  font-size: 12px;
+  font-size: 13px;
+  font-weight: 300;   /* Avenir Light, as the course site's body text */
   line-height: 1.6;
   color: var(--ink);
-  background: var(--bg);
+  background: var(--bg-page);
 }
 
 body {
@@ -67,7 +80,7 @@ header {
 }
 
 .app-title {
-  background: var(--primary);
+  background: var(--bar);
   color: #fff;
   padding: 9px 18px;
   font-weight: 700;
@@ -133,7 +146,6 @@ header {
 .tab-btn:hover { color: var(--primary); }
 .tab-btn.active {
   color: var(--primary);
-  border-bottom-color: var(--primary);
 }
 
 /* ── Page containers ──────────────────────────────────────────────────────── */
@@ -1074,15 +1086,17 @@ table { font-size: 90%; }
   overflow: auto;
   display: flex;
   align-items: flex-start;
-  justify-content: center;
+  justify-content: safe center;   /* safe: a zoomed-in page can be scrolled to its left edge */
   padding: 18px;
 }
 
 #pdf-canvas {
   display: none;
   box-shadow: 0 4px 24px rgba(0,0,0,0.45);
-  max-width: 100%;
+  flex-shrink: 0;                 /* sized by the zoom (pdf-zoom.js), not squeezed to the panel */
 }
+
+.pdf-zoom-label { min-width: 38px; text-align: center; font-weight: 600; }
 
 /* ── Misc ───────────────────────────────────────────────────────────────── */
 .hidden { display: none !important; }
@@ -1356,3 +1370,80 @@ table { font-size: 90%; }
   cursor: pointer;
 }
 .combine-actions button:hover { background: var(--primary-hover); }
+
+/* ── Shared with the Observer theme for Obsidian ───────────────────────────── */
+@keyframes ob-fade { from { opacity: 0; } }
+@keyframes ob-rise { from { opacity: 0; transform: translateY(8px) scale(0.985); } }
+@media (prefers-reduced-motion: reduce) {
+  :root { --motion-fast: 0ms; --motion-mid: 0ms; --motion-slow: 0ms; }
+}
+
+/* small h3 labels in the ramp's navy; the grey card labels keep their own colour */
+h3 { color: var(--h3); }
+
+/* the active tab's underline grows from the centre; hovering previews half of it */
+.tab-btn { position: relative; }
+.tab-btn::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -3px;   /* over the tab's transparent 3px border */
+  height: 3px;
+  background: linear-gradient(90deg, var(--ramp));
+  transform: scaleX(0);
+  transition: transform var(--motion-slow) var(--ease-out), opacity var(--motion-mid) var(--ease);
+}
+.tab-btn:not(.active):hover::after { transform: scaleX(0.5); opacity: 0.35; }
+.tab-btn.active::after { transform: scaleX(1); }
+
+/* switching tabs fades the page in; dialogs rise into place */
+.page:not(.hidden) { animation: ob-fade var(--motion-slow) var(--ease); }
+.modal-overlay:not(.hidden) { animation: ob-fade var(--motion-mid) var(--ease); }
+.modal-overlay:not(.hidden) .modal-box { animation: ob-rise var(--motion-slow) var(--ease-out); }
+
+/* buttons fade between states and press in a little */
+button {
+  transition: background-color var(--motion-fast) var(--ease), border-color var(--motion-fast) var(--ease),
+    color var(--motion-fast) var(--ease), box-shadow var(--motion-mid) var(--ease), transform var(--motion-fast) var(--ease);
+}
+button:not(.tab-btn):not(:disabled):active { transform: scale(0.98); }
+
+/* a picked row: a faint tint and a purple bar, like the course site's schedule nav */
+.row-item { transition: background-color var(--motion-fast) var(--ease), box-shadow var(--motion-mid) var(--ease); }
+.row-item.selected { background: var(--primary-tint); box-shadow: inset 3px 0 0 var(--primary); }
+.row-item.selected .row-name { font-weight: 600; }
+
+/* lighter lines: the footer sits on the page without a rule above it */
+.app-footer { border-top: 0; background: transparent; }
+
+/* scrollbars stay out of sight until the pointer is over something that scrolls */
+* { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+*:hover { scrollbar-color: var(--border-strong) transparent; }
+
+/* ── From the URBAN 520 course site: type, cards and tables ─────────────── */
+b, strong { font-weight: 600; }
+a, .open-link {
+  text-decoration-color: var(--border);
+  text-underline-offset: .18em;
+}
+
+/* card titles in the site's heading grey, kept bold */
+h2, .card h2 {
+  color: var(--heading);
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+/* cards: no border, the site's soft shadow */
+.card {
+  border: 0;
+  border-radius: 4px;
+  box-shadow: var(--card-shadow);
+}
+
+/* tables: white with hairlines */
+.data-table th { background: transparent; }

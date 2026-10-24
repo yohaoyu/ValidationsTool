@@ -272,6 +272,8 @@
         <span>/ <span id="pdf-total-pages">—</span></span>
         <button id="pdf-next" disabled>Next ▶</button>
         <button id="pdf-rotate" disabled title="Rotate page 90° clockwise">↻ Rotate</button>
+        <span id="pdf-zoom-label" class="pdf-zoom-label" title="100% = the page's real size. Zoom with the mouse's zoom wheel, a pinch, or ⌘+ / ⌘− over the page.">—</span>
+        <button id="pdf-fit" disabled title="As wide as the panel, never larger than real size (⌘0)">Fit</button>
         <label class="pdf-adjust" title="Offset applied to source_page when opening a row (e.g. +2)">
           Adjust <input id="pdf-adjust" type="number" value="0" step="1">
         </label>
@@ -371,6 +373,7 @@
 <footer class="app-footer">Version 1.0 | Urban Infrastructure Lab | University of Washington</footer>
 
 <script src="https://cdn.jsdelivr.net/npm/marked@13.0.3/marked.min.js"></script>
+<script src="/static/pdf-zoom.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>
